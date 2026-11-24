@@ -1,70 +1,58 @@
 # Hospital Management System
 
-A role-based Hospital Management System built with **Spring Boot 3**, **MongoDB**, **Spring Security**, and **Thymeleaf**. It supports three roles — Administrator, Doctor, and Patient — each with its own dashboard and permissions.
+A full-featured **Hospital Management System** built with **Spring Boot 3**, **MongoDB**, **Spring Security (form login + JWT)**, **REST APIs**, **Swagger/OpenAPI**, and **Thymeleaf**. It supports three roles — Administrator, Doctor, and Patient — through both a web UI and a stateless JSON API.
 
 ## Features
 
-### Administrator
-- System dashboard with doctor, patient, appointment, and record counts
-- Add / view / delete doctors (a doctor login is created automatically)
-- View all registered patients
-- View and update appointment statuses across the hospital
+### Web application
+- **Administrator**: dashboard with counts, add/view/delete doctors, view patients, update any appointment status
+- **Doctor**: personal dashboard, manage appointment statuses, create medical records for patients
+- **Patient**: self-registration, book appointments (with conflict detection), track status, view records
+- BCrypt password hashing, role-based URL authorization, role-aware login redirects
 
-### Doctor
-- Personal dashboard with assigned appointments and records
-- Approve, complete, or cancel their appointments
-- Create medical records (diagnosis, prescription, notes) for patients
-- View their full record history
-
-### Patient
-- Self-registration with a patient profile
-- Browse doctors and request appointments
-- Track appointment status (pending, approved, completed, cancelled)
-- View personal medical records
-
-### Security
-- Form-based login with BCrypt password hashing
-- Role-based authorization (`/admin/**`, `/doctor/**`, `/patient/**`)
-- Role-aware post-login redirects and access-denied handling
+### REST API
+- JWT access tokens issued at `POST /api/auth/login`
+- Role-scoped endpoints (`/api/admin/**`, `/api/doctor/**`, `/api/patient/**`)
+- Appointment booking with **conflict detection** — rejects slots within 30 minutes of an existing appointment for the same doctor or patient (HTTP `409 Conflict`)
+- Request validation with clear JSON error responses
+- Interactive Swagger UI and OpenAPI JSON
 
 ## Tech Stack
 
 | Layer | Technology |
 | --- | --- |
-| Backend | Java 17, Spring Boot 3.2 |
+| Backend | Java 17, Spring Boot 3.2, Spring MVC |
 | Database | MongoDB (Spring Data MongoDB) |
-| Security | Spring Security 6, BCrypt |
+| Security | Spring Security 6, BCrypt, JWT (jjwt 0.12) |
+| API docs | springdoc-openapi 2.3, Swagger UI |
 | View | Thymeleaf, Bootstrap 5 |
-| Build | Maven |
-
-## Prerequisites
-
-- JDK 17 or newer
-- Apache Maven 3.9+
-- MongoDB running on `localhost:27017` (or a MongoDB Atlas URI)
+| Build & test | Maven, JUnit 5, Mockito |
 
 ## Run locally
 
 ```bash
-# 1. Start MongoDB (example with Docker)
+# 1. Start MongoDB
 docker run -d -p 27017:27017 --name hospital-mongo mongo:7
 
-# 2. Build
+# 2. Build and test
 mvn clean package
 
 # 3. Run
 java -jar target/hospital-management-system-0.0.1-SNAPSHOT.jar
 ```
 
-Open **http://localhost:8080**.
+- Web app: **http://localhost:8080**
+- Swagger UI: **http://localhost:8080/swagger-ui.html**
+- OpenAPI JSON: **http://localhost:8080/v3/api-docs**
 
-To use MongoDB Atlas instead:
+Use MongoDB Atlas or a different secret with environment variables:
 
 ```bash
 set MONGODB_URI=mongodb+srv://<user>:<password>@cluster.mongodb.net/hospitaldb
+set JWT_SECRET=<base64-encoded-64-byte-secret>
 ```
 
-On first startup, sample users, doctors, a patient, an appointment, and a medical record are seeded automatically (only when the database is empty).
+Seed users, doctors, a patient, an appointment, and a medical record are created on first startup when the database is empty.
 
 ## Demo credentials
 
@@ -74,33 +62,81 @@ On first startup, sample users, doctors, a patient, an appointment, and a medica
 | Doctor | `doctor` | `doctor123` |
 | Patient | `patient` | `patient123` |
 
-New patients registered through the UI use their phone number as the initial password.
+## API quick start
 
-## Project structure
+```bash
+# 1. Obtain a JWT
+curl -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d "{\"username\":\"patient\",\"password\":\"patient123\"}"
+
+# 2. Use the token
+curl http://localhost:8080/api/patient/appointments \
+  -H "Authorization: Bearer <accessToken>"
+
+# 3. Book an appointment (returns 409 on a conflicting slot)
+curl -X POST http://localhost:8080/api/patient/appointments \
+  -H "Authorization: Bearer <accessToken>" \
+  -H "Content-Type: application/json" \
+  -d "{\"doctorId\":\"<doctor-id>\",\"dateTime\":\"2026-12-10T10:30:00\",\"reason\":\"Check-up\"}"
+```
+
+### Endpoints
+
+| Method | Endpoint | Role | Description |
+| --- | --- | --- | --- |
+| POST | `/api/auth/login` | Public | Issue JWT token |
+| GET | `/api/auth/me` | Any | Inspect current token |
+| GET | `/api/patient/profile` | Patient | Current patient profile |
+| GET | `/api/patient/doctors` | Patient | List doctors |
+| GET | `/api/patient/appointments` | Patient | My appointments |
+| POST | `/api/patient/appointments` | Patient | Book appointment (409 on conflict) |
+| GET | `/api/doctor/appointments` | Doctor | Assigned appointments |
+| PATCH | `/api/doctor/appointments/{id}/status` | Doctor | Update appointment status |
+| GET | `/api/doctor/records` | Doctor | My medical records |
+| POST | `/api/doctor/records` | Doctor | Create medical record |
+| GET | `/api/admin/doctors` | Admin | List doctors |
+| POST | `/api/admin/doctors` | Admin | Add doctor |
+| GET | `/api/admin/patients` | Admin | List patients |
+| GET | `/api/admin/appointments` | Admin | List all appointments |
+| PATCH | `/api/admin/appointments/{id}/status` | Admin | Update any status |
+
+## Architecture
 
 ```
 src/main/java/com/example/hospital
-├── config/       Security, user details, role redirect, seed data
-├── controller/   Auth, Admin, Doctor, Patient web controllers
+├── config/       Security chains (web + stateless API), JWT registration, Swagger, seed data, error handler
+├── controller/   Web controllers (Auth, Admin, Doctor, Patient)
+├── controller/api/ REST controllers (Auth, Patient, Doctor, Admin)
+├── dto/          Request/response records with validation
+├── exception/    ConflictException for appointment clashes
 ├── model/        User, Doctor, Patient, Appointment, MedicalRecord, enums
-└── repository/   Spring Data MongoDB repositories
-src/main/resources
-├── application.properties
-└── templates/    Login, registration, dashboards, forms, tables
+├── repository/   Spring Data MongoDB repositories
+├── security/     JwtService and JwtAuthenticationFilter
+└── service/      AppointmentService with conflict detection
+src/main/resources/templates   Thymeleaf views
 ```
+
+## Tests
+
+```bash
+mvn test
+```
+
+`AppointmentServiceTest` covers overlapping-slot rejection and successful booking using Mockito.
 
 ## Resume bullet points
 
-- Built a full-stack hospital management web application with Spring Boot 3 and MongoDB, supporting Admin, Doctor, and Patient roles.
-- Implemented secure authentication and role-based authorization using Spring Security 6 with BCrypt password encoding and custom success handling.
-- Modeled domain entities and built data access layers with Spring Data MongoDB, including derived query methods for appointments and records.
-- Designed responsive Thymeleaf + Bootstrap interfaces for appointment booking, status workflows, and electronic medical records.
-- Added idempotent seed data initialization to make the application demo-ready on first run.
+- Built a full-stack hospital management system with Spring Boot 3, MongoDB and role-based access control for Admin, Doctor and Patient users.
+- Implemented JWT authentication and separate stateless REST API and Thymeleaf web security chains using Spring Security 6.
+- Developed 15 role-scoped REST endpoints documented with Swagger/OpenAPI and validated with DTO-level constraints.
+- Added appointment scheduling with 30-minute conflict detection for doctors and patients, returning HTTP 409 on overlapping slots.
+- Wrote unit tests with JUnit 5 and Mockito for the booking conflict logic.
 
 ## Possible enhancements
 
 - Email/SMS appointment reminders
 - Prescription PDF generation
 - Payment integration for consultation fees
-- REST API + JWT for mobile clients
+- Refresh tokens and token revocation
 - Docker Compose for one-command startup

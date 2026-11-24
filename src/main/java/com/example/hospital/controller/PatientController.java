@@ -1,17 +1,16 @@
 package com.example.hospital.controller;
 
-import java.time.LocalDateTime;
-import org.springframework.format.annotation.DateTimeFormat;
+import java.security.Principal;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import java.security.Principal;
+import org.springframework.format.annotation.DateTimeFormat;
+import java.time.LocalDateTime;
+import com.example.hospital.exception.ConflictException;
 import com.example.hospital.model.Appointment;
-import com.example.hospital.model.AppointmentStatus;
 import com.example.hospital.model.Doctor;
 import com.example.hospital.model.Patient;
 import com.example.hospital.model.User;
@@ -20,6 +19,7 @@ import com.example.hospital.repository.DoctorRepository;
 import com.example.hospital.repository.MedicalRecordRepository;
 import com.example.hospital.repository.PatientRepository;
 import com.example.hospital.repository.UserRepository;
+import com.example.hospital.service.AppointmentService;
 
 @Controller
 @RequestMapping("/patient")
@@ -29,15 +29,17 @@ public class PatientController {
     private final DoctorRepository doctorRepository;
     private final AppointmentRepository appointmentRepository;
     private final MedicalRecordRepository recordRepository;
+    private final AppointmentService appointmentService;
 
     public PatientController(UserRepository userRepository, PatientRepository patientRepository,
                              DoctorRepository doctorRepository, AppointmentRepository appointmentRepository,
-                             MedicalRecordRepository recordRepository) {
+                             MedicalRecordRepository recordRepository, AppointmentService appointmentService) {
         this.userRepository = userRepository;
         this.patientRepository = patientRepository;
         this.doctorRepository = doctorRepository;
         this.appointmentRepository = appointmentRepository;
         this.recordRepository = recordRepository;
+        this.appointmentService = appointmentService;
     }
 
     private Patient currentPatient(Principal principal) {
@@ -67,12 +69,17 @@ public class PatientController {
     public String createAppointment(@RequestParam String doctorId,
                                     @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime dateTime,
                                     @RequestParam String reason,
-                                    Principal principal) {
+                                    Model model, Principal principal) {
         Patient patient = currentPatient(principal);
         Doctor doctor = doctorRepository.findById(doctorId).orElseThrow();
-        appointmentRepository.save(new Appointment(
-                patient.getId(), patient.getName(), doctor.getId(), doctor.getName(),
-                dateTime, reason, AppointmentStatus.PENDING));
+        try {
+            appointmentService.book(patient.getId(), patient.getName(), doctor.getId(), doctor.getName(),
+                    dateTime, reason);
+        } catch (ConflictException ex) {
+            model.addAttribute("error", ex.getMessage());
+            model.addAttribute("doctors", doctorRepository.findAll());
+            return "patient/book-appointment";
+        }
         return "redirect:/patient/appointments?booked=true";
     }
 

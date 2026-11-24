@@ -13,7 +13,7 @@
     <artifactId>hospital-management-system</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>hospital-management-system</name>
-    <description>Role-based Hospital Management System using Spring Boot and MongoDB</description>
+    <description>Role-based Hospital Management System using Spring Boot, MongoDB, JWT and REST APIs</description>
     <properties>
         <java.version>17</java.version>
     </properties>
@@ -41,6 +41,28 @@
         <dependency>
             <groupId>org.thymeleaf.extras</groupId>
             <artifactId>thymeleaf-extras-springsecurity6</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+            <version>0.12.3</version>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>0.12.3</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>0.12.3</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>2.3.0</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
